@@ -2,6 +2,12 @@ from pathlib import Path
 import numpy as np
 import torch
 from scipy.spatial.transform import Rotation as R
+from enum import Enum
+
+
+class PoseMode(Enum):
+    MAT4x4 = "mat4x4"  # 4x4 transformation matrix
+    TUM = "tum"  # tx, ty, tz, qx, qy, qz, qw
 
 
 def correct_intrinsic_scale(K, scale_x, scale_y):
@@ -34,11 +40,12 @@ def read_intrinsics(path_intrinsics, resize=None):
 
             K = np.array([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=np.float32)
             if resize is not None:
+                print(f"Resizing intrinsics by {resize/np.array([W, H])}")
                 K = correct_intrinsic_scale(K, resize[0] / W, resize[1] / H).numpy()
     return K, W, H
 
 
-def load_tum_poses(poses_file):
+def load_tum_poses(poses_file, return_mode=PoseMode.MAT4x4):
     """
     Load TUM pose format file: timestamp, tx, ty, tz, qx, qy, qz, qw.
     Returns:
@@ -55,12 +62,18 @@ def load_tum_poses(poses_file):
                 tx, ty, tz = map(float, parts[1:4])
                 qx, qy, qz, qw = map(float, parts[4:8])
                 timestamps.append(timestamp)
-                rotation_matrix = R.from_quat([qx, qy, qz, qw]).as_matrix()
-                transform = np.eye(4)
-                transform[:3, :3] = rotation_matrix
-                transform[:3, 3] = [tx, ty, tz]
-                # transform = [tx, ty, tz, qx, qy, qz, qw]
+
+                if return_mode == PoseMode.MAT4x4:
+                    rotation_matrix = R.from_quat([qx, qy, qz, qw]).as_matrix()
+                    transform = np.eye(4)
+                    transform[:3, :3] = rotation_matrix
+                    transform[:3, 3] = [tx, ty, tz]
+
+                elif return_mode == PoseMode.TUM:
+                    transform = [tx, ty, tz, qx, qy, qz, qw]
+
                 poses.append(transform)
+    poses = np.array(poses)
     return timestamps, poses
 
 
