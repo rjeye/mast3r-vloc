@@ -43,10 +43,10 @@ def rotmat2qvec(R):
     return qvec
 
 
-def compose_qt_tf(qvec, tvec, fix_qvec=False, return_Rt=False):
+def compose_qt_tf(qvec, tvec, in_xyzw=False, return_Rt=False):
 
-    if fix_qvec:
-        # converting [qx, qy, qz, qw] to [qw, qx, qy, qz]
+    if in_xyzw:
+        # convert [qx, qy, qz, qw] to [qw, qx, qy, qz]
         qvec = np.array([qvec[3], qvec[0], qvec[1], qvec[2]])
 
     rmat = qvec2rotmat(qvec)
@@ -63,11 +63,15 @@ def compose_qt_tf(qvec, tvec, fix_qvec=False, return_Rt=False):
     return T
 
 
-def decompose_tf_qt(T):
+def decompose_tf_qt(T, in_xyzw=False):
     rmat = T[:3, :3]
     tvec = T[:3, 3]
 
     qvec = rotmat2qvec(rmat)
+
+    if in_xyzw:
+        # convert [qw, qx, qy, qz] to [qx, qy, qz, qw]
+        qvec = np.array([qvec[1], qvec[2], qvec[3], qvec[0]])
 
     return qvec, tvec
 

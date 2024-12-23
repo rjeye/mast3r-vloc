@@ -23,21 +23,13 @@ from src.datasets.dataset_utils import (
     load_tum_poses,
     backproject_depth,
 )
+from src.utils.tf_utils import compose_qt_tf
 
 
 def log_to_rerun(data_root, subsample_factor, depth_scale=1000):
     # Load poses
-    timestamps, poses = load_tum_poses(data_root / "poses_tum.txt")
+    timestamps, poses = load_tum_poses(data_root / "poses_camera_tum.txt")
     K, W, H = read_intrinsics(data_root / "intrinsics.txt")
-
-    tf_l2c = np.array(
-        [
-            [0, 0, 1, 0],
-            [-1, 0, 0, 0],
-            [0, -1, 0, 0],
-            [0, 0, 0, 1],
-        ]
-    )
 
     # Collect and sort RGB and depth files
     rgb_folder = data_root / "rgb"
@@ -107,8 +99,7 @@ def log_to_rerun(data_root, subsample_factor, depth_scale=1000):
 
         rr.set_time_sequence("frame_nr", i)
 
-        tf_w2l = pose
-        tf_w2c = tf_w2l @ tf_l2c
+        tf_w2c = pose
 
         rr.log(
             f"world/camera",
@@ -145,6 +136,6 @@ if __name__ == "__main__":
     data_root = Path(
         "data/rrc-lab-data/wheelchair-runs-20241220/run-1-wheelchair-mapping"
     )
-    subsample_factor = 50  # Set the subsample factor to 1 to log all images
+    subsample_factor = 30  # Set the subsample factor to 1 to log all images
 
     log_to_rerun(data_root, subsample_factor)

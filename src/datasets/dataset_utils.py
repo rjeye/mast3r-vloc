@@ -7,7 +7,8 @@ from enum import Enum
 
 class PoseMode(Enum):
     MAT4x4 = "mat4x4"  # 4x4 transformation matrix
-    TUM = "tum"  # tx, ty, tz, qx, qy, qz, qw
+    TUM = "tum"  # timestamp tx, ty, tz, qx, qy, qz, qw
+    TQ = "tq"  # tx, ty, tz, qx, qy, qz
 
 
 def correct_intrinsic_scale(K, scale_x, scale_y):
@@ -69,11 +70,16 @@ def load_tum_poses(poses_file, return_mode=PoseMode.MAT4x4):
                     transform[:3, :3] = rotation_matrix
                     transform[:3, 3] = [tx, ty, tz]
 
-                elif return_mode == PoseMode.TUM:
+                elif return_mode == PoseMode.TUM or return_mode == PoseMode.TQ:
                     transform = [tx, ty, tz, qx, qy, qz, qw]
-
                 poses.append(transform)
     poses = np.array(poses)
+
+    if return_mode == PoseMode.TUM:
+        # concat timestamps to poses
+        poses = np.concatenate((np.array(timestamps)[:, None], poses), axis=1)
+        return poses
+
     return timestamps, poses
 
 
