@@ -43,7 +43,11 @@ def read_intrinsics(path_intrinsics, resize=None):
             if resize is not None:
                 print(f"Resizing intrinsics by {resize/np.array([W, H])}")
                 K = correct_intrinsic_scale(K, resize[0] / W, resize[1] / H).numpy()
-    return K, W, H
+    return {
+        "K3x3": K,
+        "width": W,
+        "height": H,
+    }
 
 
 def load_tum_poses(poses_file, return_mode=PoseMode.MAT4x4):

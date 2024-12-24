@@ -31,23 +31,20 @@ def get_complement(color_rgb):
 
 
 class ErrorCmap:
-    def __init__(self, error_threshold, cmap_name="summer"):
-        self.cmap_name = cmap_name
-        self.error_scale = 1.0
+    def __init__(self, error_threshold):
         self.error_threshold = error_threshold
         self.error_cmap = self.build_error_cmap()
 
     def build_error_cmap(self):
-        error_cmap = plt.cm.get_cmap(self.cmap_name)(np.linspace(0, 1, 256))[
-            :, :3
-        ]  # green to yellow
-        error_cmap[255] = (0.8, 0, 0)  # red for outliers
-        return error_cmap
+        summer = plt.get_cmap("summer")  # green to yellow
+        base_colors = summer(np.linspace(0, 1, 256))[:, :3]
+        base_colors[-1] = np.array([251, 65, 65]) / 255  # bright crimson
+        return base_colors
 
     def get_error_color(self, error):
-        norm_err = max(min(error / self.error_scale, 1.0), 0)
-        err_color = self.error_cmap[int(norm_err * 255)] * 255
-        return err_color
+        norm_err = np.clip(error / self.error_threshold, 0, 1)
+        idx = int(norm_err * (len(self.error_cmap) - 1))
+        return self.error_cmap[idx]
 
 
 # # Usage

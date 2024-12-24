@@ -29,7 +29,12 @@ from src.utils.tf_utils import compose_qt_tf
 def log_to_rerun(data_root, subsample_factor, depth_scale=1000):
     # Load poses
     timestamps, poses = load_tum_poses(data_root / "poses_camera_tum.txt")
-    K, W, H = read_intrinsics(data_root / "intrinsics.txt")
+    intrinsics_dict = read_intrinsics(data_root / "intrinsics.txt")
+    K, W, H = (
+        intrinsics_dict["K3x3"],
+        intrinsics_dict["width"],
+        intrinsics_dict["height"],
+    )
 
     # Collect and sort RGB and depth files
     rgb_folder = data_root / "rgb"

@@ -23,30 +23,33 @@ from src.utils.common_viz_utils import ColorSelector, get_complement, ErrorCmap
 from src.utils.tf_utils import calculate_tf_error
 
 g_DEPTH_SCALE = 1000.0  # Divide to convert to meters
-g_TRANSLATION_ERROR_THRESHOLD = 1.0  # meters
+g_TRANSLATION_ERROR_THRESHOLD = 0.5  # meters
+g_ROTATION_ERROR_THRESHOLD = 5.0  # degrees
 
 
-def log_trajectory(poses, label, traj_color):
+def log_trajectory(poses, label, traj_color, skip_linestrips=False, skip_points=False):
     # Log the full trajectory as a line
     positions = np.array([pose[:3, 3] for pose in poses])
-    rr.log(
-        f"world/trajectory_{label}",
-        rr.LineStrips3D(
-            positions,
-            colors=traj_color,
-            radii=0.02,  # Adjust line thickness as needed
-        ),
-    )
+    if not skip_linestrips:
+        rr.log(
+            f"world/trajectory_{label}",
+            rr.LineStrips3D(
+                positions,
+                colors=traj_color,
+                radii=0.02,  # Adjust line thickness as needed
+            ),
+        )
 
     # Log camera positions as points
-    rr.log(
-        f"world/camera_positions_{label}",
-        rr.Points3D(
-            positions,
-            colors=get_complement(traj_color),  # Complementary color
-            radii=0.05,  # Adjust point size as needed
-        ),
-    )
+    if not skip_points:
+        rr.log(
+            f"world/camera_positions_{label}",
+            rr.Points3D(
+                positions,
+                colors=traj_color,  # Complementary color
+                radii=0.05,  # Adjust point size as needed
+            ),
+        )
 
     # Add start marker (green sphere)
     rr.log(
@@ -71,9 +74,39 @@ def log_trajectory(poses, label, traj_color):
     )
 
 
-def log_posed_rgbd(
-    rgb, depth, pose_w2c, K, W, H, frame_id, text_label=None, text_color=None
-):
+def log_trajectory_connect(poses1, poses2, label, traj_color):
+    # check if the lengths of the two trajectories are the same
+    assert len(poses1) == len(poses2), "Trajectories must have the same length"
+
+    for i, (pose1, pose2) in enumerate(zip(poses1, poses2)):
+        positions = np.array([pose1[:3, 3], pose2[:3, 3]])
+        rr.log(
+            f"world/trajectory_connect_{label}_{i}",
+            rr.LineStrips3D(
+                positions,
+                colors=traj_color,
+                radii=0.02,  # Adjust line thickness as needed
+            ),
+        )
+
+
+def log_label(log_path, label_dict):
+    label_text = label_dict["text"]
+    label_color = label_dict["color"]
+    label_offset = label_dict["offset"]
+
+    rr.log(
+        f"{log_path}",
+        rr.Points3D(
+            label_offset,
+            colors=label_color,
+            radii=0.001,
+            labels=[label_text],
+        ),
+    )
+
+
+def log_posed_rgbd(rgb, depth, pose_w2c, intrinsics_dict, frame_id):
     if pose_w2c is not None:
         rr.log(
             f"world/camera_{frame_id}",
@@ -83,6 +116,12 @@ def log_posed_rgbd(
             ),
         )
 
+    if intrinsics_dict is not None:
+        K, W, H = (
+            intrinsics_dict["K3x3"],
+            intrinsics_dict["width"],
+            intrinsics_dict["height"],
+        )
         rr.log(
             f"world/camera_{frame_id}/image",
             rr.Pinhole(
@@ -104,27 +143,17 @@ def log_posed_rgbd(
             rr.DepthImage(depth, meter=g_DEPTH_SCALE),
         )
 
-    if text_label is not None:
-        # log error of the predicted pose as a miniscule point at the camera position
-        rr.log(
-            f"world/camera_{frame_id}/label",
-            rr.Points3D(
-                [0, -2.0, 0],
-                colors=text_color,
-                radii=0.001,
-                labels=[text_label],
-            ),
-        )
 
-
-def log_to_rerun(ref_data_root, query_data_root, exp_root, exp_name):
-    K, W, H = read_intrinsics(query_data_root / "intrinsics.txt")
+def log_to_rerun(
+    ref_data_root, query_data_root, exp_root, exp_name, blueprint_path=None
+):
+    intrinsics_dict = read_intrinsics(query_data_root / "intrinsics.txt")
 
     # Collect and sort RGB and depth files
     ref_rgb_files = natsorted(Path(ref_data_root / "rgb").glob("*.png"))
-    ref_depth_files = natsorted(Path(ref_data_root / "aligned_depth").glob("*.png"))
+    # ref_depth_files = natsorted(Path(ref_data_root / "aligned_depth").glob("*.png"))
     query_rgb_files = natsorted(Path(query_data_root / "rgb").glob("*.png"))
-    query_depth_files = natsorted(Path(query_data_root / "aligned_depth").glob("*.png"))
+    # query_depth_files = natsorted(Path(query_data_root / "aligned_depth").glob("*.png"))
 
     ref_indices, ref_poses = load_tum_poses(
         exp_root / "retrieved_ref_poses_tum.txt", PoseMode.MAT4x4
@@ -132,16 +161,29 @@ def log_to_rerun(ref_data_root, query_data_root, exp_root, exp_name):
     query_indices, query_gt_poses = load_tum_poses(
         exp_root / "filtered_query_poses_tum.txt", PoseMode.MAT4x4
     )
+
+    # full query poses
+    _, query_full_poses = load_tum_poses(
+        query_data_root / "poses_camera_tum.txt", PoseMode.MAT4x4
+    )
+
     _, query_pred_poses = load_tum_poses(
         exp_root / "pred_poses_tum_query_down.txt", PoseMode.MAT4x4
     )
 
     color_selector = ColorSelector()
-    error_cmap = ErrorCmap(g_TRANSLATION_ERROR_THRESHOLD)
+    t_error_cmap = ErrorCmap(g_TRANSLATION_ERROR_THRESHOLD)
+    R_error_cmap = ErrorCmap(g_ROTATION_ERROR_THRESHOLD)
 
     # Initialize Rerun and connect to the running Rerun TCP server
     rr.init(f"Localization Viewer {exp_name}", spawn=False)
     rr.connect_tcp()  # Connect to the TCP server
+    print(
+        "Connect to Rerun web viewer at http://localhost:9090/?url=ws://localhost:9877"
+    )
+
+    if blueprint_path is not None:
+        rr.log_file_from_path(blueprint_path)
 
     rr.set_time_sequence("frame_nr", 0)
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Z_UP, static=True)
@@ -154,9 +196,67 @@ def log_to_rerun(ref_data_root, query_data_root, exp_root, exp_name):
         ),
     )
 
-    # log_trajectory(ref_poses, "ref", color_selector.get_color("royalblue"))
-    log_trajectory(query_gt_poses, "query_gt", color_selector.get_color("orange"))
-    log_trajectory(query_pred_poses, "query_pred", color_selector.get_color("green"))
+    log_trajectory(
+        query_gt_poses,
+        "query_gt",
+        color_selector.get_color("dodgerblue"),
+        skip_linestrips=True,
+    )
+    log_trajectory(
+        query_pred_poses,
+        "query_pred",
+        color_selector.get_color("orange"),
+        skip_linestrips=False,
+    )
+    log_trajectory(
+        query_full_poses,
+        "query_full",
+        color_selector.get_color("lightblue"),
+        skip_points=True,
+    )
+    log_trajectory_connect(
+        query_gt_poses,
+        query_pred_poses,
+        "query_connect",
+        color_selector.get_color("gray"),
+    )
+
+    rr.log(
+        "translation/error",
+        rr.SeriesLine(color=color_selector.get_color("yellow"), name="error"),
+        static=True,
+    )
+
+    rr.log(
+        "translation/error_threshold",
+        rr.SeriesLine(
+            color=color_selector.get_color("white"),
+            name="threshold",
+        ),
+        static=True,
+    )
+
+    rr.log(
+        "translation/delta",
+        rr.SeriesLine(color=color_selector.get_color("coral"), name="ref delta"),
+        static=True,
+    )
+
+    rr.log(
+        "rotation/error",
+        rr.SeriesLine(color=color_selector.get_color("hotpink"), name="error"),
+        static=True,
+    )
+    rr.log(
+        "rotation/error_threshold",
+        rr.SeriesLine(color=color_selector.get_color("white"), name="threshold"),
+        static=True,
+    )
+    rr.log(
+        "rotation/delta",
+        rr.SeriesLine(color=color_selector.get_color("deepskyblue"), name="ref delta"),
+        static=True,
+    )
 
     for i, (
         ref_index,
@@ -185,41 +285,71 @@ def log_to_rerun(ref_data_root, query_data_root, exp_root, exp_name):
         rotation_error, translation_error = calculate_tf_error(
             tf_query_gt_w2c, tf_query_pred_w2c
         )
-        rotation_delta, _ = calculate_tf_error(tf_ref_w2c, tf_query_gt_w2c)
-        error_color = error_cmap.get_error_color(translation_error)
+        rotation_delta, translation_delta = calculate_tf_error(
+            tf_ref_w2c, tf_query_gt_w2c
+        )
+        t_error_color = t_error_cmap.get_error_color(np.abs(translation_error))
 
-        log_posed_rgbd(ref_rgb, None, None, K, W, H, "ref")
-        log_posed_rgbd(query_rgb, None, tf_query_gt_w2c, K, W, H, "query_gt")
+        log_posed_rgbd(ref_rgb, None, None, None, "ref")
+        log_posed_rgbd(
+            query_rgb,
+            None,
+            tf_query_gt_w2c,
+            intrinsics_dict,
+            "query_gt",
+        )
+        log_label(
+            "world/camera_query_gt/err",
+            label_dict={
+                "text": f"err {translation_error:.2f}m, {rotation_error:.2f}°",
+                "color": t_error_color,
+                "offset": [-1.0, -2.0, 0],
+            },
+        )
         log_posed_rgbd(
             None,
             None,
             tf_query_pred_w2c,
-            K,
-            W,
-            H,
+            intrinsics_dict,
             "query_pred",
-            text_label=f"{translation_error:.2f}m, {rotation_error:.2f}°",
-            text_color=error_color,
+        )
+        log_label(
+            "world/camera_query_pred/delta",
+            label_dict={
+                "text": f"ref {translation_delta:.2f}m, {rotation_delta:.2f}°",
+                "color": color_selector.get_color("white"),
+                "offset": [0, -3, 0],
+            },
         )
 
+        rr.set_time_sequence("frame_nr", i)
         rr.log(
-            f"rotation_error",
-            rr.Scalar(
-                rotation_error,
-            ),
+            "translation/error",
+            rr.Scalar(translation_error),
         )
         rr.log(
-            f"rotation_delta",
-            rr.Scalar(
-                rotation_delta,
-            ),
+            "translation/error_threshold",
+            rr.Scalar(g_TRANSLATION_ERROR_THRESHOLD),
         )
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("Disconnecting...")
-        rr.disconnect()  # Disconnect gracefully on script termination
+        rr.log(
+            "translation/delta",
+            rr.Scalar(translation_delta),
+        )
+        rr.log(
+            "rotation/error",
+            rr.Scalar(rotation_error),
+        )
+        rr.log(
+            "rotation/error_threshold",
+            rr.Scalar(g_ROTATION_ERROR_THRESHOLD),
+        )
+        rr.log(
+            "rotation/delta",
+            rr.Scalar(rotation_delta),
+        )
+
+    print("Disconnecting...")
+    rr.disconnect()  # Disconnect gracefully on script termination
 
 
 if __name__ == "__main__":
@@ -232,4 +362,5 @@ if __name__ == "__main__":
     EXP_NAME = "run-2-query-min-r-45-t-2"
     exp_root = Path("results/mast3rvloc-rrclab/") / EXP_NAME
 
-    log_to_rerun(ref_data_root, query_data_root, exp_root, EXP_NAME)
+    blueprint_path = Path("results/mast3rvloc-rrclab/localization-viewer-v2.rbl")
+    log_to_rerun(ref_data_root, query_data_root, exp_root, EXP_NAME, blueprint_path)
