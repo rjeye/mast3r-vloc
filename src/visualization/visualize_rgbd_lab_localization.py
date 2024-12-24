@@ -13,6 +13,7 @@ import os
 import time
 import numpy as np
 import cv2
+import argparse
 import rerun as rr
 from pathlib import Path
 from natsort import natsorted
@@ -27,7 +28,20 @@ g_TRANSLATION_ERROR_THRESHOLD = 0.5  # meters
 g_ROTATION_ERROR_THRESHOLD = 5.0  # degrees
 
 
-def log_trajectory(poses, label, traj_color, skip_linestrips=False, skip_points=False):
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--launch_local", action="store_true")
+
+    return parser.parse_args()
+
+
+def log_trajectory(
+    poses,
+    label,
+    traj_color,
+    skip_linestrips=False,
+    skip_points=False,
+):
     # Log the full trajectory as a line
     positions = np.array([pose[:3, 3] for pose in poses])
     if not skip_linestrips:
@@ -145,7 +159,12 @@ def log_posed_rgbd(rgb, depth, pose_w2c, intrinsics_dict, frame_id):
 
 
 def log_to_rerun(
-    ref_data_root, query_data_root, exp_root, exp_name, blueprint_path=None
+    ref_data_root,
+    query_data_root,
+    exp_root,
+    exp_name,
+    blueprint_path=None,
+    launch_local=False,
 ):
     intrinsics_dict = read_intrinsics(query_data_root / "intrinsics.txt")
 
@@ -173,14 +192,16 @@ def log_to_rerun(
 
     color_selector = ColorSelector()
     t_error_cmap = ErrorCmap(g_TRANSLATION_ERROR_THRESHOLD)
-    R_error_cmap = ErrorCmap(g_ROTATION_ERROR_THRESHOLD)
 
-    # Initialize Rerun and connect to the running Rerun TCP server
-    rr.init(f"Localization Viewer {exp_name}", spawn=False)
-    rr.connect_tcp()  # Connect to the TCP server
-    print(
-        "Connect to Rerun web viewer at http://localhost:9090/?url=ws://localhost:9877"
-    )
+    if launch_local:
+        rr.init(f"Localization Viewer {exp_name}", spawn=True)
+    else:
+        # Initialize Rerun and connect to the running Rerun TCP server
+        rr.init(f"Localization Viewer {exp_name}", spawn=False)
+        rr.connect_tcp()  # Connect to the TCP server
+        print(
+            "Connect to Rerun web viewer at http://localhost:9090/?url=ws://localhost:9877"
+        )
 
     if blueprint_path is not None:
         rr.log_file_from_path(blueprint_path)
@@ -353,6 +374,7 @@ def log_to_rerun(
 
 
 if __name__ == "__main__":
+    args = parse_args()
     ref_data_root = Path(
         "data/rrc-lab-data/wheelchair-runs-20241220/run-1-wheelchair-mapping"
     )
@@ -363,4 +385,11 @@ if __name__ == "__main__":
     exp_root = Path("results/mast3rvloc-rrclab/") / EXP_NAME
 
     blueprint_path = Path("results/mast3rvloc-rrclab/localization-viewer-v2.rbl")
-    log_to_rerun(ref_data_root, query_data_root, exp_root, EXP_NAME, blueprint_path)
+    log_to_rerun(
+        ref_data_root,
+        query_data_root,
+        exp_root,
+        EXP_NAME,
+        blueprint_path,
+        launch_local=args.launch_local,
+    )

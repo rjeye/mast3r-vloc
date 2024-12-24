@@ -13,6 +13,7 @@ import os
 import time
 import numpy as np
 import cv2
+import argparse
 import rerun as rr
 from pathlib import Path
 from natsort import natsorted
@@ -22,13 +23,27 @@ from src.datasets.dataset_utils import (
     read_intrinsics,
     load_tum_poses,
     backproject_depth,
+    PoseMode,
 )
 from src.utils.tf_utils import compose_qt_tf
 
+g_DEPTH_SCALE = 1000.0  # Divide to convert to meters
 
-def log_to_rerun(data_root, subsample_factor, depth_scale=1000):
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--launch_local", action="store_true")
+
+    return parser.parse_args()
+
+
+def log_to_rerun(
+    data_root, exp_name, subsample_factor, blueprint_path, launch_local=False
+):
     # Load poses
-    timestamps, poses = load_tum_poses(data_root / "poses_camera_tum.txt")
+    timestamps, poses = load_tum_poses(
+        data_root / "poses_camera_tum.txt", PoseMode.MAT4x4
+    )
     intrinsics_dict = read_intrinsics(data_root / "intrinsics.txt")
     K, W, H = (
         intrinsics_dict["K3x3"],
@@ -56,9 +71,15 @@ def log_to_rerun(data_root, subsample_factor, depth_scale=1000):
     ), f"Mismatch between RGB {len(rgb_files)} and poses {len(poses)}"
     print(f"Subsampled {len(rgb_files)} frames")
 
-    # Initialize Rerun and connect to the running Rerun TCP server
-    rr.init("Trajectory Viewer", spawn=False)
-    rr.connect_tcp()  # Connect to the TCP server
+    if launch_local:
+        rr.init(f"Trajectory Viewer {exp_name}", spawn=True)
+    else:
+        # By Default initialize Rerun and connect to the running Rerun TCP server
+        rr.init(f"Trajectory Viewer {exp_name}", spawn=False)
+        rr.connect_tcp()  # Connect to the TCP server
+
+    if blueprint_path is not None:
+        rr.log_file_from_path(blueprint_path)
 
     rr.set_time_sequence("frame_nr", 0)
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Z_UP, static=True)
@@ -127,20 +148,23 @@ def log_to_rerun(data_root, subsample_factor, depth_scale=1000):
             f"world/camera/image/rgb",
             rr.Image(rgb, color_model="BGR").compress(jpeg_quality=95),
         )
-        rr.log(f"world/camera/image/depth", rr.DepthImage(depth, meter=depth_scale))
+        rr.log(f"world/camera/image/depth", rr.DepthImage(depth, meter=g_DEPTH_SCALE))
 
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        print("Disconnecting...")
-        rr.disconnect()  # Disconnect gracefully on script termination
+    print("Disconnecting...")
+    rr.disconnect()  # Disconnect gracefully on script termination
 
 
 if __name__ == "__main__":
-    data_root = Path(
-        "data/rrc-lab-data/wheelchair-runs-20241220/run-1-wheelchair-mapping"
-    )
-    subsample_factor = 30  # Set the subsample factor to 1 to log all images
+    args = parse_args()
 
-    log_to_rerun(data_root, subsample_factor)
+    EXP_NAME = "run-3-wheelchair-query"
+    data_root = Path("data/rrc-lab-data/wheelchair-runs-20241220/") / EXP_NAME
+    subsample_factor = 30  # Set the subsample factor to 1 to log all images
+    blueprint_path = Path("results/mast3rvloc-rrclab/trajectory-viewer.rbl")
+    log_to_rerun(
+        data_root,
+        EXP_NAME,
+        subsample_factor,
+        blueprint_path,
+        launch_local=args.launch_local,
+    )
