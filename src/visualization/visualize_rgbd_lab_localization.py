@@ -381,7 +381,7 @@ if __name__ == "__main__":
     query_data_root = Path(
         "data/rrc-lab-data/wheelchair-runs-20241220/run-2-wheelchair-query"
     )
-    EXP_NAME = "run-2-query-min-r-45-t-2"
+    EXP_NAME = "run-2-query-max-r-80-t-1"
     exp_root = Path("results/mast3rvloc-rrclab/") / EXP_NAME
 
     blueprint_path = Path("results/mast3rvloc-rrclab/localization-viewer-v2.rbl")

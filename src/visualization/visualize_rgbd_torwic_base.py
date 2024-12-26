@@ -13,7 +13,6 @@ import os
 import time
 import numpy as np
 import cv2
-import open3d as o3d
 import rerun as rr
 from pathlib import Path
 from natsort import natsorted
@@ -53,7 +52,7 @@ def log_to_rerun(data_root, ply_path, subsample_factor, depth_scale=1000):
 
     qvec_l2c = np.array([0.41406507, -0.6100328, 0.57049433, -0.3618651])
     tvec_l2c = np.array([0.07686256, -0.15441064, -0.1026438])
-    tf_l2c = compose_qt_tf(qvec_l2c, tvec_l2c, fix_qvec=True)
+    tf_l2c = compose_qt_tf(qvec_l2c, tvec_l2c, in_xyzw=True)
 
     assert len(rgb_files) == len(
         depth_files
@@ -142,12 +141,10 @@ def log_to_rerun(data_root, ply_path, subsample_factor, depth_scale=1000):
 
 
 if __name__ == "__main__":
-    data_root = Path(
-        "/home/onyx/work_dirs/rjayanti/mast3r-vloc/data/TorWIC-SLAM/Jun15/Aisle_CCW_Run_1"
-    )
-    ply_path = Path(
-        "/home/onyx/work_dirs/rjayanti/mast3r-vloc/data/TorWIC-SLAM/groundtruth_map.ply"
-    )
+    data_root = Path("data/TorWIC-SLAM/Jun15/Aisle_CCW_Run_1")
+    # ply_path = Path(
+    #     "/home/onyx/work_dirs/rjayanti/mast3r-vloc/data/TorWIC-SLAM/groundtruth_map.ply"
+    # )
     subsample_factor = 20  # Set the subsample factor to 1 to log all images
 
-    log_to_rerun(data_root, ply_path, subsample_factor)
+    log_to_rerun(data_root, None, subsample_factor)

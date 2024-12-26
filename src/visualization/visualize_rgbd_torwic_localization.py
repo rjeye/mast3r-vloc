@@ -183,7 +183,7 @@ def log_to_rerun(
 
     # full query poses
     _, query_full_poses = load_tum_poses(
-        query_data_root / "poses_camera_tum.txt", PoseMode.MAT4x4
+        query_data_root / "poses_camera_right_tum.txt", PoseMode.MAT4x4
     )
 
     _, query_pred_poses = load_tum_poses(
@@ -386,8 +386,8 @@ if __name__ == "__main__":
     SENSORDEPTH = False
 
     ROT_EXP_TYPE = "min"  # min, max
-    MAX_ROTATION_ERROR = 135.0  # Maximum allowable rotation error in degrees
-    MAX_TRANSLATION_ERROR = 1.0  # Maximum allowable translation error in meters
+    MAX_ROTATION_ERROR = 45.0  # Maximum allowable rotation error in degrees
+    MAX_TRANSLATION_ERROR = 3.0  # Maximum allowable translation error in meters
 
     # strip _ from Ref RUN and make Ref day and ref run lowercase and build the experiment name
     if SENSORDEPTH:
