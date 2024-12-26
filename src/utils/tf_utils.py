@@ -1,46 +1,71 @@
 import numpy as np
+from scipy.spatial.transform import Rotation
+from typing import Union
 
 
-def qvec2rotmat(qvec):
-    return np.array(
-        [
-            [
-                1 - 2 * qvec[2] ** 2 - 2 * qvec[3] ** 2,
-                2 * qvec[1] * qvec[2] - 2 * qvec[0] * qvec[3],
-                2 * qvec[3] * qvec[1] + 2 * qvec[0] * qvec[2],
-            ],
-            [
-                2 * qvec[1] * qvec[2] + 2 * qvec[0] * qvec[3],
-                1 - 2 * qvec[1] ** 2 - 2 * qvec[3] ** 2,
-                2 * qvec[2] * qvec[3] - 2 * qvec[0] * qvec[1],
-            ],
-            [
-                2 * qvec[3] * qvec[1] - 2 * qvec[0] * qvec[2],
-                2 * qvec[2] * qvec[3] + 2 * qvec[0] * qvec[1],
-                1 - 2 * qvec[1] ** 2 - 2 * qvec[2] ** 2,
-            ],
-        ]
-    )
+def qvec2rotmat(qvec: np.ndarray) -> np.ndarray:
+    """
+    Convert a quaternion back to a rotation matrix.
+
+    Parameters:
+    -----------
+    qvec : np.ndarray
+        Quaternion in [w, x, y, z] format
+
+    Returns:
+    --------
+    np.ndarray
+        3x3 rotation matrix
+    """
+    # Convert from [w, x, y, z] to scipy's [x, y, z, w] format
+    quat_scipy = np.roll(qvec, -1)
+    rot = Rotation.from_quat(quat_scipy)
+    return rot.as_matrix()
 
 
-def rotmat2qvec(R):
-    Rxx, Ryx, Rzx, Rxy, Ryy, Rzy, Rxz, Ryz, Rzz = R.flat
-    K = (
-        np.array(
-            [
-                [Rxx - Ryy - Rzz, 0, 0, 0],
-                [Ryx + Rxy, Ryy - Rxx - Rzz, 0, 0],
-                [Rzx + Rxz, Rzy + Ryz, Rzz - Rxx - Ryy, 0],
-                [Ryz - Rzy, Rzx - Rxz, Rxy - Ryx, Rxx + Ryy + Rzz],
-            ]
-        )
-        / 3.0
-    )
-    eigvals, eigvecs = np.linalg.eigh(K)
-    qvec = eigvecs[[3, 0, 1, 2], np.argmax(eigvals)]
-    if qvec[0] < 0:
-        qvec *= -1
-    return qvec
+def rotmat2qvec(R: Union[np.ndarray, list]) -> np.ndarray:
+    """
+    Convert a 3x3 rotation matrix to a quaternion using scipy's robust implementation.
+
+    Parameters:
+    -----------
+    R : Union[np.ndarray, list]
+        3x3 rotation matrix. Can be provided as a numpy array or nested list.
+
+    Returns:
+    --------
+    np.ndarray
+        Quaternion as [w, x, y, z]
+
+    Raises:
+    -------
+    ValueError
+        If input matrix is not 3x3 or is not a valid rotation matrix
+
+    Examples:
+    --------
+    >>> R = np.eye(3)  # Identity rotation matrix
+    >>> q = rotation_matrix_to_quaternion(R)
+    >>> print(q)  # Should print approximately [1, 0, 0, 0]
+    """
+    # Convert input to numpy array if needed
+    R = np.asarray(R, dtype=np.float64)
+
+    # Input validation
+    if R.shape != (3, 3):
+        raise ValueError(f"Expected 3x3 matrix, got shape {R.shape}")
+
+    # Check if it's a valid rotation matrix
+    is_orthogonal = np.allclose(R @ R.T, np.eye(3), rtol=1e-05, atol=1e-08)
+    det_is_one = np.allclose(np.linalg.det(R), 1.0, rtol=1e-05, atol=1e-08)
+
+    if not (is_orthogonal and det_is_one):
+        raise ValueError(f"Input is not a valid rotation matrix | R3x3={R}")
+
+    # Convert to quaternion using scipy
+    rot = Rotation.from_matrix(R)
+    qvec = rot.as_quat()  # returns [x, y, z, w]
+    return np.roll(qvec, 1)  # convert to [w, x, y, z] format
 
 
 def compose_qt_tf(qvec, tvec, in_xyzw=False, return_Rt=False):
