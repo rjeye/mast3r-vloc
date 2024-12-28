@@ -3,6 +3,9 @@ import numpy as np
 import torch
 from scipy.spatial.transform import Rotation as R
 from enum import Enum
+import pickle
+import cv2
+import matplotlib.pyplot as plt
 
 
 class PoseMode(Enum):
@@ -87,18 +90,85 @@ def load_tum_poses(poses_file, return_mode=PoseMode.MAT4x4):
     return timestamps, poses
 
 
-def backproject_depth(depth, intrinsics):
-    """Convert depth map to 3D points using camera intrinsics."""
-    h, w = depth.shape
-    fx, fy, cx, cy = (
-        intrinsics[0, 0],
-        intrinsics[1, 1],
-        intrinsics[0, 2],
-        intrinsics[1, 2],
+def scale_matches(
+    matches: np.ndarray, orig_size: tuple, resize_size: tuple
+) -> np.ndarray:
+    """Scale match coordinates from resized to original image dimensions."""
+    scale = np.array(
+        [orig_size[1] / resize_size[1], orig_size[0] / resize_size[0]]  # width scale
+    )  # height scale
+    return matches * scale[None, :]
+
+
+def plot_mast3r_inliers(path_mast3r_inliers, view1, view2, TOP_K=15):
+
+    # check if inliers file exists otherwise return None
+    if not Path(path_mast3r_inliers).exists():
+        return None
+
+    with open(path_mast3r_inliers, "rb") as f:
+        inliers = pickle.load(f)
+
+    # resize matches_im0 and matches_im1
+    matches_im0 = inliers["matches_im0"]
+    matches_im1 = inliers["matches_im1"]
+    H0, W0 = inliers["H0W0"]
+    H1, W1 = inliers["H1W1"]
+
+    H0_RESIZE, W0_RESIZE = inliers["H0W0_RESIZE"]
+    H1_RESIZE, W1_RESIZE = inliers["H1W1_RESIZE"]
+    xyz_0_inliers = inliers["xyz_0"]
+
+    # resize 2d image matches to origina size using the scaling factor H0/H0_RESIZE and W0/W0_RESIZE
+    matches_im0 = scale_matches(np.array(matches_im0), (H0, W0), (H0_RESIZE, W0_RESIZE))
+    matches_im1 = scale_matches(np.array(matches_im1), (H1, W1), (H1_RESIZE, W1_RESIZE))
+
+    # # resize view1 and view2 to resized size
+    # view1 = cv2.resize(view1, (W0_RESIZE, H0_RESIZE))
+    # view2 = cv2.resize(view2, (W1_RESIZE, H1_RESIZE))
+
+    # visualize a few matches
+    n_viz = TOP_K
+    num_matches = matches_im0.shape[0]
+    match_idx_to_viz = np.round(np.linspace(0, num_matches - 1, n_viz)).astype(int)
+    viz_matches_im0, viz_matches_im1 = (
+        matches_im0[match_idx_to_viz],
+        matches_im1[match_idx_to_viz],
     )
-    u, v = np.meshgrid(np.arange(w), np.arange(h))
-    z = depth / 1000.0  # Convert from millimeters to meters
-    x = (u - cx) * z / fx
-    y = (v - cy) * z / fy
-    points = np.stack((x, y, z), axis=-1).reshape(-1, 3)
-    return points[z.flatten() > 0]  # Keep only valid depth points
+
+    viz_imgs = [view1, view2]
+
+    H0, W0, H1, W1 = *viz_imgs[0].shape[:2], *viz_imgs[1].shape[:2]
+    img0 = np.pad(
+        viz_imgs[0],
+        ((0, max(H1 - H0, 0)), (0, 0), (0, 0)),
+        "constant",
+        constant_values=0,
+    )
+    img1 = np.pad(
+        viz_imgs[1],
+        ((0, max(H0 - H1, 0)), (0, 0), (0, 0)),
+        "constant",
+        constant_values=0,
+    )
+    stitched_img = np.concatenate((img0, img1), axis=1)
+
+    # Create color array using similar colormap logic
+    colors = [
+        tuple(int(c * 255) for c in plt.cm.viridis(i / (TOP_K - 1))[:3])
+        for i in range(TOP_K)
+    ]
+
+    # Draw matches
+    for i in range(TOP_K):
+        pt0 = tuple(map(int, viz_matches_im0[i]))
+        pt1 = (int(viz_matches_im1[i][0] + W0), int(viz_matches_im1[i][1]))
+
+        # Draw line
+        cv2.line(stitched_img, pt0, pt1, colors[i], thickness=2)
+
+        # Draw points
+        cv2.circle(stitched_img, pt0, 2, colors[i], -1)
+        cv2.circle(stitched_img, pt1, 2, colors[i], -1)
+
+    return stitched_img

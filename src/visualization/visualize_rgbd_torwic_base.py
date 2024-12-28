@@ -21,7 +21,6 @@ from scipy.spatial.transform import Rotation as R
 from src.datasets.dataset_utils import (
     read_intrinsics,
     load_tum_poses,
-    backproject_depth,
 )
 from src.utils.tf_utils import compose_qt_tf
 

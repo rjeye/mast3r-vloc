@@ -30,7 +30,7 @@ class PnPSolver:
         pts0 = np.int32(pts0)
 
         if len(pts0) < 4:
-            return np.full((3, 3), np.nan), np.full((3, 1), np.nan), 0
+            return (np.full((3, 3), np.nan), np.full((3, 1), np.nan), 0, None)
 
         # get depth at correspondence points
         depth_pts0 = depth_0[pts0[:, 1], pts0[:, 0]]
@@ -38,7 +38,7 @@ class PnPSolver:
         # remove invalid pts (depth == 0)
         valid = depth_pts0 > depth_0.min()
         if valid.sum() < 4:
-            return np.full((3, 3), np.nan), np.full((3, 1), np.nan), 0
+            return np.full((3, 3), np.nan), np.full((3, 1), np.nan), 0, None
         pts0 = pts0[valid]
         pts1 = pts1[valid].astype(np.float32)
         depth_pts0 = depth_pts0[valid]
@@ -75,17 +75,23 @@ class PnPSolver:
             rvec = rvec[0]
             tvec = tvec[0]
 
+        reprojection_errors = np.full(len(pts1), np.nan)  # Default errors as NaN
+
         # avoid degenerate solutions
         if succ:
             if np.linalg.norm(tvec) > 1000:
                 succ = False
 
+            # Calculate reprojection errors as a measure of inlier quality
+            projected_points, _ = cv2.projectPoints(xyz_0, rvec, tvec, K1, None)
+            reprojection_errors = np.linalg.norm(projected_points[:, 0] - pts1, axis=1)
+
         if succ:
             R, _ = cv2.Rodrigues(rvec)
             t = tvec.reshape(3, 1)
+            return R, t, inliers.squeeze(), reprojection_errors
         else:
             R = np.full((3, 3), np.nan)
             t = np.full((3, 1), np.nan)
             inliers = []
-
-        return R, t, len(inliers)
+            return R, t, inliers, reprojection_errors

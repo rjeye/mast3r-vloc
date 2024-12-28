@@ -19,7 +19,12 @@ from pathlib import Path
 from natsort import natsorted
 from scipy.spatial.transform import Rotation as R
 
-from src.datasets.dataset_utils import read_intrinsics, load_tum_poses, PoseMode
+from src.datasets.dataset_utils import (
+    read_intrinsics,
+    load_tum_poses,
+    PoseMode,
+    plot_mast3r_inliers,
+)
 from src.utils.common_viz_utils import ColorSelector, get_complement, ErrorCmap
 from src.utils.tf_utils import calculate_tf_error
 
@@ -148,7 +153,7 @@ def log_posed_rgbd(rgb, depth, pose_w2c, intrinsics_dict, frame_id):
     if rgb is not None:
         rr.log(
             f"world/camera_{frame_id}/image/rgb",
-            rr.Image(rgb, color_model="BGR").compress(jpeg_quality=95),
+            rr.Image(rgb).compress(jpeg_quality=95),
         )
 
     if depth is not None:
@@ -289,15 +294,18 @@ def log_to_rerun(
         zip(ref_indices, query_indices, ref_poses, query_gt_poses, query_pred_poses)
     ):
         rr.set_time_sequence("frame_nr", i)
-        # Load RGB and depth images
+        # Load RGB and depth images as RGB
         ref_rgb = cv2.imread(str(ref_rgb_files[int(ref_index)]), cv2.IMREAD_COLOR)
-        # ref_depth = cv2.imread(
-        #     str(ref_depth_files[int(ref_index)]), cv2.IMREAD_UNCHANGED
-        # )
+        ref_rgb = cv2.cvtColor(ref_rgb, cv2.COLOR_BGR2RGB)
+
         query_rgb = cv2.imread(str(query_rgb_files[int(query_index)]), cv2.IMREAD_COLOR)
-        # query_depth = cv2.imread(
-        #     str(query_depth_files[int(ref_index)]), cv2.IMREAD_UNCHANGED
-        # )
+        query_rgb = cv2.cvtColor(query_rgb, cv2.COLOR_BGR2RGB)
+
+        stitched_op = plot_mast3r_inliers(
+            Path(exp_root / "mast3r_inliers") / f"query_{int(query_index)}_inliers.pkl",
+            ref_rgb,
+            query_rgb,
+        )
 
         tf_ref_w2c = ref_pose
         tf_query_gt_w2c = query_gt_pose
@@ -343,6 +351,12 @@ def log_to_rerun(
             },
         )
 
+        if stitched_op is not None:
+            rr.log(
+                "stitched_op",
+                rr.Image(stitched_op).compress(jpeg_quality=95),
+            )
+
         rr.set_time_sequence("frame_nr", i)
         rr.log(
             "translation/error",
@@ -378,13 +392,18 @@ if __name__ == "__main__":
     ref_data_root = Path(
         "data/rrc-lab-data/wheelchair-runs-20241220/run-1-wheelchair-mapping"
     )
+
+    QUERY_RUN = 2
+
     query_data_root = Path(
-        "data/rrc-lab-data/wheelchair-runs-20241220/run-2-wheelchair-query"
+        f"data/rrc-lab-data/wheelchair-runs-20241220/run-{QUERY_RUN}-wheelchair-query"
     )
-    EXP_NAME = "run-2-query-max-r-80-t-1"
+
+    EXP_NAME = f"run-{QUERY_RUN}-query-min-r-45-t-3"
+    # EXP_NAME = f"run-{QUERY_RUN}-query-asmk-retrieval"
     exp_root = Path("results/mast3rvloc-rrclab/") / EXP_NAME
 
-    blueprint_path = Path("results/mast3rvloc-rrclab/localization-viewer-v2.rbl")
+    blueprint_path = Path("results/rr-blueprints/localization-viewer-v3.rbl")
     log_to_rerun(
         ref_data_root,
         query_data_root,

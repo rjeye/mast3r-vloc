@@ -19,7 +19,12 @@ from pathlib import Path
 from natsort import natsorted
 from scipy.spatial.transform import Rotation as R
 
-from src.datasets.dataset_utils import read_intrinsics, load_tum_poses, PoseMode
+from src.datasets.dataset_utils import (
+    read_intrinsics,
+    load_tum_poses,
+    PoseMode,
+    plot_mast3r_inliers,
+)
 from src.utils.common_viz_utils import ColorSelector, get_complement, ErrorCmap
 from src.utils.tf_utils import calculate_tf_error
 
@@ -148,7 +153,7 @@ def log_posed_rgbd(rgb, depth, pose_w2c, intrinsics_dict, frame_id):
     if rgb is not None:
         rr.log(
             f"world/camera_{frame_id}/image/rgb",
-            rr.Image(rgb, color_model="BGR").compress(jpeg_quality=95),
+            rr.Image(rgb).compress(jpeg_quality=95),
         )
 
     if depth is not None:
@@ -235,12 +240,12 @@ def log_to_rerun(
         color_selector.get_color("lightblue"),
         skip_points=True,
     )
-    log_trajectory_connect(
-        query_gt_poses,
-        query_pred_poses,
-        "query_connect",
-        color_selector.get_color("gray"),
-    )
+    # log_trajectory_connect(
+    #     query_gt_poses,
+    #     query_pred_poses,
+    #     "query_connect",
+    #     color_selector.get_color("gray"),
+    # )
 
     rr.log(
         "translation/error",
@@ -291,13 +296,16 @@ def log_to_rerun(
         rr.set_time_sequence("frame_nr", i)
         # Load RGB and depth images
         ref_rgb = cv2.imread(str(ref_rgb_files[int(ref_index)]), cv2.IMREAD_COLOR)
-        # ref_depth = cv2.imread(
-        #     str(ref_depth_files[int(ref_index)]), cv2.IMREAD_UNCHANGED
-        # )
+        ref_rgb = cv2.cvtColor(ref_rgb, cv2.COLOR_BGR2RGB)
+
         query_rgb = cv2.imread(str(query_rgb_files[int(query_index)]), cv2.IMREAD_COLOR)
-        # query_depth = cv2.imread(
-        #     str(query_depth_files[int(ref_index)]), cv2.IMREAD_UNCHANGED
-        # )
+        query_rgb = cv2.cvtColor(query_rgb, cv2.COLOR_BGR2RGB)
+
+        stitched_op = plot_mast3r_inliers(
+            Path(exp_root / "mast3r_inliers") / f"query_{int(query_index)}_inliers.pkl",
+            ref_rgb,
+            query_rgb,
+        )
 
         tf_ref_w2c = ref_pose
         tf_query_gt_w2c = query_gt_pose
@@ -311,7 +319,7 @@ def log_to_rerun(
         )
         t_error_color = t_error_cmap.get_error_color(np.abs(translation_error))
 
-        log_posed_rgbd(ref_rgb, None, None, None, "ref")
+        log_posed_rgbd(ref_rgb, None, tf_ref_w2c, intrinsics_dict, "ref")
         log_posed_rgbd(
             query_rgb,
             None,
@@ -320,13 +328,14 @@ def log_to_rerun(
             "query_gt",
         )
         log_label(
-            "world/camera_query_gt/err",
+            "world/camera_query_gt/delta",
             label_dict={
-                "text": f"err {translation_error:.2f}m, {rotation_error:.2f}°",
-                "color": t_error_color,
-                "offset": [-1.0, -2.0, 0],
+                "text": f"ref {translation_delta:.2f}m, {rotation_delta:.2f}°",
+                "color": color_selector.get_color("white"),
+                "offset": [0, -3, 0],
             },
         )
+
         log_posed_rgbd(
             None,
             None,
@@ -335,13 +344,19 @@ def log_to_rerun(
             "query_pred",
         )
         log_label(
-            "world/camera_query_pred/delta",
+            "world/camera_query_pred/err",
             label_dict={
-                "text": f"ref {translation_delta:.2f}m, {rotation_delta:.2f}°",
-                "color": color_selector.get_color("white"),
-                "offset": [0, -3, 0],
+                "text": f"err {translation_error:.2f}m, {rotation_error:.2f}°",
+                "color": t_error_color,
+                "offset": [-1.0, -2.0, 0],
             },
         )
+
+        if stitched_op is not None:
+            rr.log(
+                "stitched_op",
+                rr.Image(stitched_op).compress(jpeg_quality=95),
+            )
 
         rr.set_time_sequence("frame_nr", i)
         rr.log(
@@ -381,26 +396,28 @@ if __name__ == "__main__":
     REF_DAY = "Jun15"
     REF_RUN = "Aisle_CCW_Run_1"
     QUERY_DAY = "Jun23"
-    QUERY_RUN = "Aisle_CCW_Run_1"
+    QUERY_RUN = "Aisle_CW_Run_2"
 
-    SENSORDEPTH = False
+    # SENSORDEPTH = False
 
-    ROT_EXP_TYPE = "min"  # min, max
-    MAX_ROTATION_ERROR = 45.0  # Maximum allowable rotation error in degrees
-    MAX_TRANSLATION_ERROR = 3.0  # Maximum allowable translation error in meters
+    # ROT_EXP_TYPE = "min"  # min, max
+    # MAX_ROTATION_ERROR = 45.0  # Maximum allowable rotation error in degrees
+    # MAX_TRANSLATION_ERROR = 3.0  # Maximum allowable translation error in meters
 
-    # strip _ from Ref RUN and make Ref day and ref run lowercase and build the experiment name
-    if SENSORDEPTH:
-        experiment_name = f"{REF_DAY.lower()}-{REF_RUN.replace('_', '').lower()}-query-{QUERY_DAY.lower()}-{QUERY_RUN.replace('_', '').lower()}-{ROT_EXP_TYPE}-r-{int(MAX_ROTATION_ERROR)}-t-{int(MAX_TRANSLATION_ERROR)}-sensordepth"
-    else:
-        experiment_name = f"{REF_DAY.lower()}-{REF_RUN.replace('_', '').lower()}-query-{QUERY_DAY.lower()}-{QUERY_RUN.replace('_', '').lower()}-{ROT_EXP_TYPE}-r-{int(MAX_ROTATION_ERROR)}-t-{int(MAX_TRANSLATION_ERROR)}"
+    # # strip _ from Ref RUN and make Ref day and ref run lowercase and build the experiment name
+    # if SENSORDEPTH:
+    #     experiment_name = f"{REF_DAY.lower()}-{REF_RUN.replace('_', '').lower()}-query-{QUERY_DAY.lower()}-{QUERY_RUN.replace('_', '').lower()}-{ROT_EXP_TYPE}-r-{int(MAX_ROTATION_ERROR)}-t-{int(MAX_TRANSLATION_ERROR)}-sensordepth"
+    # else:
+    #     experiment_name = f"{REF_DAY.lower()}-{REF_RUN.replace('_', '').lower()}-query-{QUERY_DAY.lower()}-{QUERY_RUN.replace('_', '').lower()}-{ROT_EXP_TYPE}-r-{int(MAX_ROTATION_ERROR)}-t-{int(MAX_TRANSLATION_ERROR)}"
+
+    experiment_name = f"{REF_DAY.lower()}-{REF_RUN.replace('_', '').lower()}-query-{QUERY_DAY.lower()}-{QUERY_RUN.replace('_', '').lower()}-asmk-retrieval"
 
     ref_data_root = dataset_root / REF_DAY / REF_RUN
     query_data_root = dataset_root / QUERY_DAY / QUERY_RUN
 
     exp_root = Path("results/mast3rvloc-torwic/") / experiment_name
 
-    blueprint_path = Path("results/mast3rvloc-torwic/localization-viewer-v2.rbl")
+    blueprint_path = Path("results/rr-blueprints/localization-viewer-v4.rbl")
     log_to_rerun(
         ref_data_root,
         query_data_root,
