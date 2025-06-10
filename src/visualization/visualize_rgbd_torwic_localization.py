@@ -396,13 +396,13 @@ if __name__ == "__main__":
     REF_DAY = "Jun15"
     REF_RUN = "Aisle_CCW_Run_1"
     QUERY_DAY = "Jun23"
-    QUERY_RUN = "Aisle_CW_Run_2"
+    QUERY_RUN = "Aisle_CW_Run_1"
 
     # SENSORDEPTH = False
 
-    # ROT_EXP_TYPE = "min"  # min, max
-    # MAX_ROTATION_ERROR = 45.0  # Maximum allowable rotation error in degrees
-    # MAX_TRANSLATION_ERROR = 3.0  # Maximum allowable translation error in meters
+    ROT_EXP_TYPE = "min"  # min, max
+    MAX_ROTATION_ERROR = 45.0  # Maximum allowable rotation error in degrees
+    MAX_TRANSLATION_ERROR = 3.0  # Maximum allowable translation error in meters
 
     # # strip _ from Ref RUN and make Ref day and ref run lowercase and build the experiment name
     # if SENSORDEPTH:
@@ -410,14 +410,15 @@ if __name__ == "__main__":
     # else:
     #     experiment_name = f"{REF_DAY.lower()}-{REF_RUN.replace('_', '').lower()}-query-{QUERY_DAY.lower()}-{QUERY_RUN.replace('_', '').lower()}-{ROT_EXP_TYPE}-r-{int(MAX_ROTATION_ERROR)}-t-{int(MAX_TRANSLATION_ERROR)}"
 
-    experiment_name = f"{REF_DAY.lower()}-{REF_RUN.replace('_', '').lower()}-query-{QUERY_DAY.lower()}-{QUERY_RUN.replace('_', '').lower()}-asmk-retrieval"
+    experiment_name = f"{REF_DAY.lower()}-{REF_RUN.replace('_', '').lower()}-query-{QUERY_DAY.lower()}-{QUERY_RUN.replace('_', '').lower()}-{ROT_EXP_TYPE}-r-{int(MAX_ROTATION_ERROR)}-t-{int(MAX_TRANSLATION_ERROR)}"
+    # experiment_name = f"{REF_DAY.lower()}-{REF_RUN.replace('_', '').lower()}-query-{QUERY_DAY.lower()}-{QUERY_RUN.replace('_', '').lower()}-asmk-retrieval"
 
     ref_data_root = dataset_root / REF_DAY / REF_RUN
     query_data_root = dataset_root / QUERY_DAY / QUERY_RUN
 
     exp_root = Path("results/mast3rvloc-torwic/") / experiment_name
 
-    blueprint_path = Path("results/rr-blueprints/localization-viewer-v4.rbl")
+    blueprint_path = Path("results/rr-blueprints/localization-viewer-v2.rbl")
     log_to_rerun(
         ref_data_root,
         query_data_root,

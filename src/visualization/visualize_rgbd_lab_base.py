@@ -22,7 +22,7 @@ from scipy.spatial.transform import Rotation as R
 from src.datasets.dataset_utils import (
     read_intrinsics,
     load_tum_poses,
-    backproject_depth,
+    # backproject_depth,
     PoseMode,
 )
 from src.utils.tf_utils import compose_qt_tf
@@ -76,10 +76,16 @@ def log_to_rerun(
     else:
         # By Default initialize Rerun and connect to the running Rerun TCP server
         rr.init(f"Trajectory Viewer {exp_name}", spawn=False)
+        print(
+            "Connect to web server via: http://localhost:9090?url=ws://localhost:9877"
+        )
         rr.connect_tcp()  # Connect to the TCP server
 
     if blueprint_path is not None:
-        rr.log_file_from_path(blueprint_path)
+        if os.path.exists(blueprint_path):
+            rr.log_file_from_path(blueprint_path)
+        else:
+            print(f"Blueprint file {blueprint_path} not found")
 
     rr.set_time_sequence("frame_nr", 0)
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Z_UP, static=True)
@@ -157,9 +163,9 @@ def log_to_rerun(
 if __name__ == "__main__":
     args = parse_args()
 
-    EXP_NAME = "run-3-wheelchair-query"
+    EXP_NAME = "run-1-wheelchair-mapping"
     data_root = Path("data/rrc-lab-data/wheelchair-runs-20241220/") / EXP_NAME
-    subsample_factor = 30  # Set the subsample factor to 1 to log all images
+    subsample_factor = 5  # Set the subsample factor to 1 to log all images
     blueprint_path = Path("results/mast3rvloc-rrclab/trajectory-viewer.rbl")
     log_to_rerun(
         data_root,

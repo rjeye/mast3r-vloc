@@ -301,11 +301,11 @@ def log_to_rerun(
         query_rgb = cv2.imread(str(query_rgb_files[int(query_index)]), cv2.IMREAD_COLOR)
         query_rgb = cv2.cvtColor(query_rgb, cv2.COLOR_BGR2RGB)
 
-        stitched_op = plot_mast3r_inliers(
-            Path(exp_root / "mast3r_inliers") / f"query_{int(query_index)}_inliers.pkl",
-            ref_rgb,
-            query_rgb,
-        )
+        # stitched_op = plot_mast3r_inliers(
+        #     Path(exp_root / "mast3r_inliers") / f"query_{int(query_index)}_inliers.pkl",
+        #     ref_rgb,
+        #     query_rgb,
+        # )
 
         tf_ref_w2c = ref_pose
         tf_query_gt_w2c = query_gt_pose
@@ -351,11 +351,11 @@ def log_to_rerun(
             },
         )
 
-        if stitched_op is not None:
-            rr.log(
-                "stitched_op",
-                rr.Image(stitched_op).compress(jpeg_quality=95),
-            )
+        # if stitched_op is not None:
+        #     rr.log(
+        #         "stitched_op",
+        #         rr.Image(stitched_op).compress(jpeg_quality=95),
+        #     )
 
         rr.set_time_sequence("frame_nr", i)
         rr.log(
@@ -393,7 +393,7 @@ if __name__ == "__main__":
         "data/rrc-lab-data/wheelchair-runs-20241220/run-1-wheelchair-mapping"
     )
 
-    QUERY_RUN = 2
+    QUERY_RUN = 3
 
     query_data_root = Path(
         f"data/rrc-lab-data/wheelchair-runs-20241220/run-{QUERY_RUN}-wheelchair-query"
@@ -403,7 +403,7 @@ if __name__ == "__main__":
     # EXP_NAME = f"run-{QUERY_RUN}-query-asmk-retrieval"
     exp_root = Path("results/mast3rvloc-rrclab/") / EXP_NAME
 
-    blueprint_path = Path("results/rr-blueprints/localization-viewer-v3.rbl")
+    blueprint_path = Path("results/rr-blueprints/localization-viewer-v2.rbl")
     log_to_rerun(
         ref_data_root,
         query_data_root,

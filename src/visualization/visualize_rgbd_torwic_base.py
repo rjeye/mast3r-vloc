@@ -19,13 +19,13 @@ from natsort import natsorted
 from scipy.spatial.transform import Rotation as R
 
 from src.datasets.dataset_utils import (
-    read_intrinsics,
+    # read_intrinsics,
     load_tum_poses,
 )
 from src.utils.tf_utils import compose_qt_tf
 
 
-def log_to_rerun(data_root, ply_path, subsample_factor, depth_scale=1000):
+def log_to_rerun(data_root, blueprint_path, subsample_factor, depth_scale=1000):
     # Load poses
     timestamps, poses = load_tum_poses(data_root / "traj_gt.txt")
     fx, fy, cx, cy = (
@@ -64,6 +64,12 @@ def log_to_rerun(data_root, ply_path, subsample_factor, depth_scale=1000):
     # Initialize Rerun and connect to the running Rerun TCP server
     rr.init("Trajectory Viewer", spawn=False)
     rr.connect_tcp()  # Connect to the TCP server
+
+    if blueprint_path is not None:
+        if os.path.exists(blueprint_path):
+            rr.log_file_from_path(blueprint_path)
+        else:
+            print(f"Blueprint file {blueprint_path} not found")
 
     rr.set_time_sequence("frame_nr", 0)
     rr.log("world", rr.ViewCoordinates.RIGHT_HAND_Z_UP, static=True)
@@ -145,5 +151,6 @@ if __name__ == "__main__":
     #     "/home/onyx/work_dirs/rjayanti/mast3r-vloc/data/TorWIC-SLAM/groundtruth_map.ply"
     # )
     subsample_factor = 20  # Set the subsample factor to 1 to log all images
+    blueprint_path = Path("results/mast3rvloc-torwic/trajectory-viewer.rbl")
 
-    log_to_rerun(data_root, None, subsample_factor)
+    log_to_rerun(data_root, blueprint_path, subsample_factor)
